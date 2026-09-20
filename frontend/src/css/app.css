@@ -1,0 +1,14 @@
+body {
+  margin: 0;
+  background: #f0f4f8;
+}
+
+.page-pad {
+  padding: 20px 24px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.metric-card .q-card__section {
+  min-height: 88px;
+}

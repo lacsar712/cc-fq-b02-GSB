@@ -1,0 +1,53 @@
+services:
+  db:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: fastq
+      POSTGRES_PASSWORD: fastq
+      POSTGRES_DB: fastq_qc
+    ports:
+      - "54384:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fastq -d fastq_qc"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8184:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://fastq:fastq@db:5432/fastq_qc
+      JWT_SECRET: fastq-qc-pipeline-dev-secret
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    build:
+      context: ./backend
+    command: python seed.py
+    environment:
+      DATABASE_URL: postgresql+psycopg2://fastq:fastq@db:5432/fastq_qc
+      JWT_SECRET: fastq-qc-pipeline-dev-secret
+    depends_on:
+      backend:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3184:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
