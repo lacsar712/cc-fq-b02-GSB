@@ -43,6 +43,16 @@
       <template #body-cell-actions="props">
         <q-td :props="props">
           <q-btn dense flat color="primary" label="详情" :to="`/jobs/${props.row.id}`" />
+          <q-btn
+            v-if="auth.role === 'bioops' && ['pending', 'running'].includes(props.row.status)"
+            dense
+            flat
+            color="negative"
+            label="终止"
+            :loading="cancellingId === props.row.id"
+            class="q-ml-sm"
+            @click="confirmCancel(props.row)"
+          />
         </q-td>
       </template>
     </q-table>
@@ -52,12 +62,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useQuasar } from 'quasar'
-import { listJobs } from '../api/client'
+import { cancelJob, listJobs } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const $q = useQuasar()
 const loading = ref(false)
+const cancellingId = ref(null)
 const rows = ref([])
 
 const columns = [
@@ -77,11 +88,50 @@ const columns = [
 ]
 
 function statusLabel(s) {
-  return { pending: '排队中', running: '运行中', success: '成功', failed: '失败' }[s] || s
+  return (
+    {
+      pending: '排队中',
+      running: '运行中',
+      success: '成功',
+      failed: '失败',
+      cancelled: '已取消',
+    }[s] || s
+  )
 }
 
 function statusColor(s) {
-  return { pending: 'grey', running: 'info', success: 'positive', failed: 'negative' }[s] || 'grey'
+  return (
+    {
+      pending: 'grey',
+      running: 'info',
+      success: 'positive',
+      failed: 'negative',
+      cancelled: 'orange',
+    }[s] || 'grey'
+  )
+}
+
+function confirmCancel(row) {
+  $q.dialog({
+    title: '终止作业',
+    message: `确定终止作业 #${row.id} 吗？终止后状态变为「已取消」，后续阶段将停止或跳过，且不可恢复。`,
+    ok: { label: '终止', color: 'negative' },
+    cancel: { label: '再想想', flat: true },
+  }).onOk(() => doCancel(row.id))
+}
+
+async function doCancel(id) {
+  cancellingId.value = id
+  try {
+    await cancelJob(id)
+    $q.notify({ type: 'positive', message: `作业 #${id} 已终止` })
+    await load()
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e.message || '终止失败' })
+    await load()
+  } finally {
+    cancellingId.value = null
+  }
 }
 
 async function load() {

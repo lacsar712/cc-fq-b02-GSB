@@ -3,6 +3,15 @@
     <div class="row items-center q-mb-md">
       <div class="text-h5">作业详情 #{{ job?.id || '…' }}</div>
       <q-space />
+      <q-btn
+        v-if="auth.role === 'bioops' && canCancel"
+        color="negative"
+        icon="cancel"
+        label="终止作业"
+        :disable="cancelling"
+        class="q-mr-sm"
+        @click="confirmCancel"
+      />
       <q-btn flat icon="refresh" label="刷新" @click="load" :loading="loading" />
       <q-btn flat label="返回历史" to="/jobs" />
     </div>
@@ -68,16 +77,21 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
-import { getJob, getJobStages } from '../api/client'
+import { cancelJob, getJob, getJobStages } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const $q = useQuasar()
+const auth = useAuthStore()
 const loading = ref(false)
+const cancelling = ref(false)
 const job = ref(null)
 const stages = ref([])
 let timer = null
 
 const metrics = computed(() => job.value?.metrics || null)
+
+const canCancel = computed(() => ['pending', 'running'].includes(job.value?.status))
 
 const metricCards = computed(() => {
   const m = metrics.value
@@ -98,12 +112,21 @@ const statusBannerClass = computed(() => {
   const s = job.value?.status
   if (s === 'success') return 'bg-positive text-white'
   if (s === 'failed') return 'bg-negative text-white'
+  if (s === 'cancelled') return 'bg-orange-7 text-white'
   if (s === 'running') return 'bg-info text-dark'
   return 'bg-grey-3'
 })
 
 function statusLabel(s) {
-  return { pending: '排队中', running: '运行中', success: '成功', failed: '失败' }[s] || s
+  return (
+    {
+      pending: '排队中',
+      running: '运行中',
+      success: '成功',
+      failed: '失败',
+      cancelled: '已取消',
+    }[s] || s
+  )
 }
 
 function stageColor(status) {
@@ -114,6 +137,7 @@ function stageColor(status) {
       success: 'positive',
       failed: 'negative',
       skipped: 'warning',
+      cancelled: 'orange',
     }[status] || 'grey'
   )
 }
@@ -126,6 +150,7 @@ function stageIcon(status) {
       success: 'check_circle',
       failed: 'error',
       skipped: 'skip_next',
+      cancelled: 'cancel',
     }[status] || 'circle'
   )
 }
@@ -155,6 +180,29 @@ async function load() {
     $q.notify({ type: 'negative', message: e.message || '加载失败' })
   } finally {
     loading.value = false
+  }
+}
+
+function confirmCancel() {
+  $q.dialog({
+    title: '终止作业',
+    message: `确定终止作业 #${job.value.id} 吗？终止后状态变为「已取消」，后续阶段将停止或跳过，且不可恢复。`,
+    ok: { label: '终止', color: 'negative' },
+    cancel: { label: '再想想', flat: true },
+  }).onOk(() => doCancel())
+}
+
+async function doCancel() {
+  cancelling.value = true
+  try {
+    job.value = await cancelJob(job.value.id)
+    stages.value = await getJobStages(job.value.id)
+    $q.notify({ type: 'positive', message: `作业 #${job.value.id} 已终止` })
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e.message || '终止失败' })
+    await load()
+  } finally {
+    cancelling.value = false
   }
 }
 
