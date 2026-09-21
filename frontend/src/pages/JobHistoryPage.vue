@@ -43,6 +43,14 @@
       <template #body-cell-actions="props">
         <q-td :props="props">
           <q-btn dense flat color="primary" label="详情" :to="`/jobs/${props.row.id}`" />
+          <q-btn
+            v-if="auth.role === 'bioops' && ['pending', 'running'].includes(props.row.status)"
+            dense
+            flat
+            color="negative"
+            label="终止"
+            @click="confirmCancel(props.row)"
+          />
         </q-td>
       </template>
     </q-table>
@@ -52,7 +60,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useQuasar } from 'quasar'
-import { listJobs } from '../api/client'
+import { cancelJob, listJobs } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -77,11 +85,42 @@ const columns = [
 ]
 
 function statusLabel(s) {
-  return { pending: '排队中', running: '运行中', success: '成功', failed: '失败' }[s] || s
+  return (
+    { pending: '排队中', running: '运行中', success: '成功', failed: '失败', cancelled: '已取消' }[
+      s
+    ] || s
+  )
 }
 
 function statusColor(s) {
-  return { pending: 'grey', running: 'info', success: 'positive', failed: 'negative' }[s] || 'grey'
+  return (
+    {
+      pending: 'grey',
+      running: 'info',
+      success: 'positive',
+      failed: 'negative',
+      cancelled: 'warning',
+    }[s] || 'grey'
+  )
+}
+
+function confirmCancel(row) {
+  $q.dialog({
+    title: '终止作业',
+    message: `确定要终止作业 #${row.id}（${row.sample_name}）吗？终止后状态为已取消，后续阶段将停止或跳过。`,
+    cancel: { label: '再想想', flat: true },
+    ok: { label: '确认终止', color: 'negative' },
+    persistent: true,
+  }).onOk(async () => {
+    try {
+      await cancelJob(row.id)
+      $q.notify({ type: 'positive', message: `作业 #${row.id} 已终止` })
+    } catch (e) {
+      $q.notify({ type: 'negative', message: e.message || '终止失败' })
+    } finally {
+      await load()
+    }
+  })
 }
 
 async function load() {

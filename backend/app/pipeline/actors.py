@@ -32,6 +32,7 @@ class PipelineContext:
     metrics: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     failed_actor: str | None = None
+    cancelled: bool = False
 
 
 @dataclass

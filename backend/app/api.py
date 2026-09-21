@@ -1,10 +1,12 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import authenticate_user, create_access_token, get_current_user, require_bioops
 from app.database import SessionLocal, get_db
 from app.models import Job, JobStage, Sample
-from app.pipeline.runner import create_job_stages, run_pipeline_sync
+from app.pipeline.runner import CANCELLABLE_STATUSES, create_job_stages, run_pipeline_sync
 from app.schemas import (
     HealthOut,
     JobCreate,
@@ -126,4 +128,50 @@ def get_job_stages(
         .filter(JobStage.job_id == job_id)
         .order_by(JobStage.stage_order)
         .all()
+    )
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=JobOut)
+def cancel_job(
+    job_id: int,
+    _user: dict = Depends(require_bioops),
+    db: Session = Depends(get_db),
+):
+    """终止仍在排队或执行中的作业：状态变为已取消，后续阶段停止/跳过。"""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="作业不存在")
+
+    now = datetime.now(timezone.utc)
+    # Atomic transition: only queued/running jobs can be terminated. If the
+    # pipeline finalized the job concurrently, this matches nothing → 409.
+    updated = (
+        db.query(Job)
+        .filter(Job.id == job_id, Job.status.in_(CANCELLABLE_STATUSES))
+        .update({"status": "cancelled", "finished_at": now}, synchronize_session=False)
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="仅排队中或运行中的作业可终止",
+        )
+
+    # Subsequent stages stop/skip immediately so detail & history reflect it.
+    pending_stages = (
+        db.query(JobStage)
+        .filter(JobStage.job_id == job_id, JobStage.status == "pending")
+        .all()
+    )
+    for st in pending_stages:
+        st.status = "skipped"
+        st.message = "因作业终止而跳过"
+        st.started_at = st.started_at or now
+        st.finished_at = now
+    db.commit()
+
+    return (
+        db.query(Job)
+        .options(joinedload(Job.stages))
+        .filter(Job.id == job_id)
+        .first()
     )

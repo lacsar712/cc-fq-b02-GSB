@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "fastq-qc-pipeline-dev-secret"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 480
+    # Simulated per-stage compute time so running jobs stay observable (and
+    # can be terminated) instead of finishing in milliseconds.
+    stage_delay_seconds: float = 1.5
 
 
 settings = Settings()

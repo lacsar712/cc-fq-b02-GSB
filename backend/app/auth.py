@@ -64,5 +64,5 @@ def get_current_user(
 
 def require_bioops(user: dict = Depends(get_current_user)) -> dict:
     if user["role"] != "bioops":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅运维账号可提交质控作业")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅运维账号可执行此操作")
     return user

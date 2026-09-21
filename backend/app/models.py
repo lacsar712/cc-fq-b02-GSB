@@ -23,7 +23,7 @@ class Job(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sample_id: Mapped[int | None] = mapped_column(ForeignKey("samples.id"), nullable=True)
     sample_name: Mapped[str] = mapped_column(String(128), default="自定义输入")
-    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending/running/success/failed
+    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending/running/success/failed/cancelled
     created_by: Mapped[str] = mapped_column(String(64), nullable=False)
     metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

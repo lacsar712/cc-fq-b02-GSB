@@ -23,8 +23,8 @@
 
 | 用户 | 密码 | 权限 |
 |------|------|------|
-| `bioops` | `fastq123456` | 可提交质控作业 |
-| `auditor` | `audit123456` | 只读结果，不可提交 |
+| `bioops` | `fastq123456` | 可提交质控作业、终止排队/运行中的作业 |
+| `auditor` | `audit123456` | 只读结果，不可提交/终止 |
 
 ## 一键启动
 
@@ -46,8 +46,9 @@ docker compose up --build
 2. **样例库** 看到 2 条样例 → 选合格样例 **提交质控作业**。
 3. 作业详情页看到四个 Actor 阶段均为成功，指标卡出现 `reads` / `mean_quality` / `n_rate`。
 4. 再跑损坏样例：`ParseActor` = failed，其余 = skipped。
-5. 退出，用 `auditor` / `audit123456` 登录：可看历史与详情，提交作业接口返回 403 / 前端无提交入口。
-6. 健康检查：`curl http://localhost:8184/api/health`
+5. 提交合格样例后立刻点 **终止作业**：状态变为 **已取消**，未执行阶段 = skipped，且不会随后变成成功；已成功/已失败的作业无终止按钮，接口返回 409。
+6. 退出，用 `auditor` / `audit123456` 登录：可看历史与详情，无提交/终止入口，直调接口返回 403。
+7. 健康检查：`curl http://localhost:8184/api/health`
 
 ## API
 
@@ -58,6 +59,7 @@ docker compose up --build
 - `GET  /api/jobs`
 - `GET  /api/jobs/{id}`
 - `GET  /api/jobs/{id}/stages`
+- `POST /api/jobs/{id}/cancel`（仅运维；仅排队中/运行中可终止，否则 409）
 
 ## 本地单测（可选）
 
@@ -67,7 +69,9 @@ pip install -r requirements.txt
 pytest -q
 ```
 
-覆盖：畸形 FASTQ 在 `ParseActor` 失败；正常样例产出 `mean_quality`。
+覆盖：畸形 FASTQ 在 `ParseActor` 失败；正常样例产出 `mean_quality`；作业终止（权限、409、取消后不得变成成功）。
+
+每个 Actor 阶段默认有 1.5s 模拟计算耗时（`STAGE_DELAY_SECONDS` 可调），便于观察运行中状态与终止操作。
 
 ## 目录结构
 

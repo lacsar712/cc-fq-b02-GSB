@@ -62,4 +62,9 @@ export async function createJob(body) {
   return data
 }
 
+export async function cancelJob(id) {
+  const { data } = await api.post(`/jobs/${id}/cancel`)
+  return data
+}
+
 export default api
